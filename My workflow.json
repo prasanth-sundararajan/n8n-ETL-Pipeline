@@ -1,0 +1,473 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Student Enrollment ETL Pipeline",
+        "formDescription": "Upload your student enrollment CSV file below.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Student Enrollment ETL Pipeline",
+              "fieldType": "file"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -1360,
+        -192
+      ],
+      "id": "53d15889-c3a6-4cf6-9dbb-abf48f70fc70",
+      "name": "On form submission",
+      "webhookId": "bfd855b8-4696-4a9e-9c73-bd72676b2149"
+    },
+    {
+      "parameters": {
+        "binaryPropertyName": "Student_Enrollment_ETL_Pipeline",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1136,
+        -48
+      ],
+      "id": "7e917571-3a15-4cf3-942e-86d5c1fa0aaf",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst seen = new Set();\nconst results = [];\n\nfor (const item of items) {\n  let data = item.json;\n\n  // 1. Normalize unique identifiers for reliable duplicate checking\n  let studentId = (data.Student_ID || \"\").trim();\n  let email = (data.Email || \"\").trim().toLowerCase();\n  let uniqueKey = studentId || email;\n\n  let isDuplicate = false;\n  if (uniqueKey && seen.has(uniqueKey)) {\n    isDuplicate = true;\n  } else if (uniqueKey) {\n    seen.add(uniqueKey);\n  }\n\n  // 2. Name: Title Case\n  let name = (data.Name || \"\").trim();\n  name = name.toLowerCase().replace(/\\b\\w/g, c => c.toUpperCase());\n\n  // 3. Email validation\n  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  let validEmail = email;\n  if (!emailRegex.test(validEmail)) {\n    validEmail = \"INVALID_EMAIL\";\n  }\n\n  // 4. Phone validation\n  let rawPhone = data.Phone || \"\";\n  let phone = String(rawPhone).replace(/\\D/g, '');\n  if (phone.length < 10) {\n    phone = \"MISSING\";\n  }\n\n  // 5. Course standardization\n  let course = (data.Course || \"\").trim();\n  const validCourses = [\"Python\", \"Machine Learning\", \"Data Science\"];\n  const matchedCourse = validCourses.find(c => c.toLowerCase() === course.toLowerCase());\n  course = matchedCourse || \"Python\";\n\n  // 6. Fee_Paid conversion\n  let feePaid = data.Fee_Paid;\n  if (typeof feePaid === 'string') {\n    const lower = feePaid.toLowerCase();\n    if (lower === 'yes' || lower === 'true') feePaid = true;\n    else if (lower === 'no' || lower === 'false') feePaid = false;\n  }\n  feePaid = Boolean(feePaid);\n\n  // 7. City formatting\n  let city = (data.City || \"\").trim();\n  if (!city) {\n    city = \"UNKNOWN\";\n  } else {\n    city = city.toLowerCase().replace(/\\b\\w/g, c => c.toUpperCase());\n  }\n\n  // 8. Date formatting\n  let enrolledDate = (data.Enrolled_Date || \"\").trim();\n  const parsedDate = new Date(enrolledDate);\n  if (!isNaN(parsedDate.getTime())) {\n    enrolledDate = parsedDate.toISOString().split('T')[0];\n  } else {\n    enrolledDate = \"2025-01-01\";\n  }\n\n  // Determine category for Switch node routing\n  let category = \"unpaid\";\n  if (isDuplicate) {\n    category = \"duplicate\";\n  } else if (feePaid === true) {\n    category = \"paid\";\n  }\n\n  results.push({\n    json: {\n      Student_ID: studentId,\n      Name: name,\n      Email: validEmail,\n      Phone: phone,\n      Course: course,\n      Fee_Paid: feePaid,\n      City: city,\n      Enrolled_Date: enrolledDate,\n      category: category\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        -224
+      ],
+      "id": "835eab51-8e46-4207-9357-5bda3b27a1af",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "paid",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "b0f84c52-87bc-4687-a9a5-ab89864bfd8f"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "97f8e036-8d77-47f5-a491-60b79ea6a886",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "unpaid",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "8a7c55e4-0b96-4514-a584-5985cceae757",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "duplicate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        -32,
+        -128
+      ],
+      "id": "45df2e49-4a21-4d15-b4b5-42cb3733cd3f",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "Paid",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        -320
+      ],
+      "id": "c833932c-08f3-48b6-898a-181db1ca664d",
+      "name": "Convert to File"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "unpaid",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        -128
+      ],
+      "id": "41b6f0f6-6cf1-4812-86e7-0deabf15498c",
+      "name": "Convert to File1"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "duplicates",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        96
+      ],
+      "id": "df57ca3c-a376-483c-9ad7-1a247a391d89",
+      "name": "Convert to File2"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -928,
+        -304
+      ],
+      "id": "ffb04303-2947-4288-b5d0-08a7eb8fbbe0",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2c347c70-6885-4ca1-9b34-8c5db14dab00",
+              "leftValue": "={{ $json.Phone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -736,
+        -144
+      ],
+      "id": "226c5444-42f0-4a32-b008-9512f5f82d47",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "Missing_phone_details",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        -464,
+        0
+      ],
+      "id": "9cefe862-fc11-4894-b906-c23f6a9ca29d",
+      "name": "Convert to File3"
+    },
+    {
+      "parameters": {
+        "fromEmail": "prasanthspbio@gmail.com",
+        "toEmail": "prasanthspbio@gmail.com",
+        "subject": "Categorized Student Data - Paid",
+        "emailFormat": "both",
+        "text": "Please find attached the Paid student report.",
+        "options": {
+          "appendAttribution": false,
+          "fileAttachments": "Paid"
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        448,
+        -320
+      ],
+      "id": "25e85e06-66e2-4d13-98fc-4c5365128827",
+      "name": "Send an Email",
+      "webhookId": "c08504ad-6bd2-4a60-9a9e-8d563a4a34f7",
+      "credentials": {
+        "smtp": {
+          "id": "ZWmDynNu5NphBrRL",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "prasanthspbio@gmail.com",
+        "toEmail": "prasanthspbio@gmail.com",
+        "subject": "Catagorized Student Data - Unpaid",
+        "emailFormat": "both",
+        "text": "Please find the attached unpaid student report",
+        "options": {
+          "appendAttribution": false,
+          "fileAttachments": "unpaid"
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        464,
+        -128
+      ],
+      "id": "8ecd2974-b517-4969-a54e-2b86b279d099",
+      "name": "Send an Email1",
+      "webhookId": "24127ed9-0011-42b1-8a78-4ee0e840d6a4",
+      "credentials": {
+        "smtp": {
+          "id": "ZWmDynNu5NphBrRL",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "prasanthspbio@gmail.com",
+        "toEmail": "prasanthspbio@gmail.com",
+        "subject": "Duplicate details from student Data",
+        "emailFormat": "both",
+        "text": "Duplicate Details from student data",
+        "options": {
+          "appendAttribution": true,
+          "fileAttachments": "duplicates"
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        464,
+        96
+      ],
+      "id": "75cd91d6-76b3-4363-8cf1-2c85e850852a",
+      "name": "Send an Email2",
+      "webhookId": "40357c2e-4ccd-4db7-9a18-f0a6136ecc2e",
+      "credentials": {
+        "smtp": {
+          "id": "ZWmDynNu5NphBrRL",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Convert to File1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Convert to File2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Convert to File3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File1": {
+      "main": [
+        [
+          {
+            "node": "Send an Email1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File2": {
+      "main": [
+        [
+          {
+            "node": "Send an Email2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "90fbcbe2-ca27-406d-933e-8c8ad89ecc26",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "90bf22d370cf94ed8c3782978f16a7f8f4bf91b7546816931d1c3c4aefa231d7"
+  },
+  "nodeGroups": [],
+  "id": "hDtGbFg9C5EMn5t1",
+  "tags": []
+}
